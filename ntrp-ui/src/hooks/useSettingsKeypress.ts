@@ -67,6 +67,7 @@ export function useSettingsKeypress({
     handleCancelVaultEdit, handleStartVaultEdit, handleSaveVault, handleVaultKey,
 
     showingBrowserDropdown, setShowingBrowserDropdown, updatingVault,
+    handleCycleWebSearch,
 
     notifiers, skills,
   } = state;
@@ -262,6 +263,8 @@ export function useSettingsKeypress({
             handleStartVaultEdit();
           } else if (connectionItem === "browser") {
             setShowingBrowserDropdown(true);
+          } else if (connectionItem === "web") {
+            handleCycleWebSearch();
           } else if (TOGGLEABLE_SOURCES.includes(connectionItem)) {
             handleToggleSource(connectionItem);
           }
@@ -296,6 +299,7 @@ export function useSettingsKeypress({
       settings, onUpdate, onClose, actionInProgress,
       connectionItem, googleAccounts, selectedGoogleIndex, serverConfig,
       handleAddGoogle, handleRemoveGoogle, handleStartVaultEdit, handleToggleSource,
+      handleCycleWebSearch,
       notifiers, skills,
       editingServer, serverIndex, serverUrl, serverApiKey, handleServerUrlKey, handleServerApiKeyKey, handleSaveServer,
       editingDirectives, handleDirectivesKey, handleSaveDirectives, handleStartDirectivesEdit,

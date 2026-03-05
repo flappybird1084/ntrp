@@ -121,6 +121,7 @@ export interface UseSettingsStateResult {
   updatingBrowser: boolean;
   browserError: string | null;
   handleSelectBrowser: (browser: string | null) => Promise<void>;
+  handleCycleWebSearch: () => Promise<void>;
 
   notifiers: UseNotifiersResult;
   skills: UseSkillsResult;
@@ -232,6 +233,24 @@ export function useSettingsState({
     }
   }, [config, serverConfig?.browser, onServerConfigChange]);
 
+  const handleCycleWebSearch = useCallback(async () => {
+    if (!serverConfig) return;
+    const modes: Array<"auto" | "exa" | "ddgs" | "none"> = ["auto", "exa", "ddgs", "none"];
+    const current = serverConfig.web_search ?? "auto";
+    const index = modes.indexOf(current);
+    const next = modes[(index + 1) % modes.length];
+
+    setActionInProgress("Updating...");
+    try {
+      await updateConfig(config, { web_search: next });
+      const updatedConfig = await getServerConfig(config);
+      onServerConfigChange(updatedConfig);
+    } catch {
+    } finally {
+      setActionInProgress(null);
+    }
+  }, [config, serverConfig, onServerConfigChange]);
+
   return {
     ...providers,
     ...services,
@@ -254,6 +273,7 @@ export function useSettingsState({
     updatingBrowser,
     browserError,
     handleSelectBrowser,
+    handleCycleWebSearch,
 
     notifiers,
     skills,
