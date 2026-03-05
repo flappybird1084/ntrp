@@ -15,8 +15,9 @@ import {
   restoreSession,
   type SessionListItem,
 } from "../api/client.js";
+import { deleteCredentials } from "../lib/secrets.js";
 
-type ViewMode = "chat" | "memory" | "settings" | "schedules" | "dashboard" | "sessions";
+type ViewMode = "chat" | "memory" | "automations";
 
 function findSession(sessions: SessionListItem[], query: string): SessionListItem | undefined {
   const q = query.toLowerCase();
@@ -37,22 +38,24 @@ interface CommandContext {
   sendMessage: (msg: string) => void;
   setStatus: (status: StatusType) => void;
   toggleSettings: () => void;
-  openThemePicker: () => void;
+  openDialog: (id: string) => void;
   exit: () => void;
   refreshIndexStatus: () => Promise<void>;
   createNewSession: (name?: string) => Promise<string | null>;
   switchSession: (sessionId: string) => Promise<{ history: HistoryMessage[] } | null>;
-  resetForSessionSwitch: (newHistory?: Message[]) => void;
+  switchToSession: (sessionId: string, history?: Message[]) => void;
+  deleteSessionState: (sessionId: string) => void;
   refreshSidebar: () => void;
+  logout: () => void;
 }
 
 type CommandHandler = (ctx: CommandContext, args: string[]) => boolean | Promise<boolean>;
 
 const COMMAND_HANDLERS: Record<string, CommandHandler> = {
+  connect: ({ openDialog }) => { openDialog("providers"); return true; },
   memory: ({ setViewMode }) => { setViewMode("memory"); return true; },
-  schedules: ({ setViewMode }) => { setViewMode("schedules"); return true; },
-  dashboard: ({ setViewMode }) => { setViewMode("dashboard"); return true; },
-  theme: ({ openThemePicker }) => { openThemePicker(); return true; },
+  automations: ({ setViewMode }) => { setViewMode("automations"); return true; },
+  theme: ({ openDialog }) => { openDialog("theme"); return true; },
   settings: ({ toggleSettings }) => { toggleSettings(); return true; },
 
   compact: async ({ config, sessionId, addMessage, setStatus }) => {
@@ -78,7 +81,11 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
     return true;
   },
 
-  purge: async ({ config, addMessage }) => {
+  purge: async ({ config, addMessage }, args) => {
+    if (args[0] !== "confirm") {
+      addMessage({ role: "status", content: "This will delete all memory facts and links. Type /purge confirm to proceed." });
+      return true;
+    }
     try {
       const result = await purgeMemory(config);
       const { facts, links } = result.deleted;
@@ -105,11 +112,11 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
     return true;
   },
 
-  new: async ({ addMessage, createNewSession, resetForSessionSwitch, refreshSidebar }, args) => {
+  new: async ({ addMessage, createNewSession, switchToSession, refreshSidebar }, args) => {
     const name = args.join(" ").trim() || undefined;
     const newId = await createNewSession(name);
     if (newId) {
-      resetForSessionSwitch([]);
+      switchToSession(newId, []);
       refreshSidebar();
     } else {
       addMessage({ role: "error", content: "Failed to create session" });
@@ -117,7 +124,7 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
     return true;
   },
 
-  sessions: ({ setViewMode }) => { setViewMode("sessions"); return true; },
+  sessions: ({ openDialog }) => { openDialog("sessions"); return true; },
 
   name: async ({ config, sessionId, addMessage, updateSessionInfo, refreshSidebar }, args) => {
     const name = args.join(" ").trim();
@@ -139,7 +146,7 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
     return true;
   },
 
-  delete: async ({ config, sessionId, addMessage, createNewSession, resetForSessionSwitch, switchSession, refreshSidebar }, args) => {
+  delete: async ({ config, sessionId, addMessage, createNewSession, switchToSession, deleteSessionState, switchSession, refreshSidebar }, args) => {
     const query = args.join(" ").trim();
     try {
       const { sessions } = await listSessions(config);
@@ -159,6 +166,7 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
         return true;
       }
 
+      deleteSessionState(targetId);
       await deleteSession(config, targetId);
 
       if (targetId === sessionId) {
@@ -166,16 +174,16 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
         if (next) {
           const result = await switchSession(next.session_id);
           if (result) {
-            resetForSessionSwitch(result.history.map((msg, i) => ({
+            switchToSession(next.session_id, result.history.map((msg, i) => ({
               id: `h-${i}`, role: msg.role, content: msg.content,
             })));
           } else {
-            await createNewSession();
-            resetForSessionSwitch([]);
+            const newId = await createNewSession();
+            if (newId) switchToSession(newId, []);
           }
         } else {
-          await createNewSession();
-          resetForSessionSwitch([]);
+          const newId = await createNewSession();
+          if (newId) switchToSession(newId, []);
         }
       }
 
@@ -208,7 +216,14 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
     return true;
   },
 
-  model: ({ toggleSettings }) => { toggleSettings(); return true; },
+  logout: async ({ logout }) => {
+    await deleteCredentials();
+    logout();
+    return true;
+  },
+
+  models: ({ openDialog }) => { openDialog("models"); return true; },
+  model: ({ openDialog }) => { openDialog("models"); return true; },
   exit: ({ exit }) => { exit(); return true; },
   quit: ({ exit }) => { exit(); return true; },
 };
@@ -219,7 +234,7 @@ export function useCommands(context: CommandContext) {
 
   const handleCommand = useCallback(
     async (command: string): Promise<boolean> => {
-      const parts = command.replace("/", "").split(" ");
+      const parts = command.slice(1).split(" ");
       const cmd = parts[0].toLowerCase();
 
       const handler = COMMAND_HANDLERS[cmd];

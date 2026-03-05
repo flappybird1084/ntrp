@@ -1,0 +1,107 @@
+---
+title: "Quickstart"
+description: "Get ntrp running in 5 minutes."
+---
+
+## Prerequisites
+
+- Python 3.13+ with [uv](https://docs.astral.sh/uv/)
+- [Bun](https://bun.sh) runtime
+- An LLM provider: Anthropic (API key or Claude Pro/Max subscription), OpenAI, or Google — can be configured during setup
+
+## Install
+
+<Tabs>
+  <Tab title="From package registries">
+    ```bash
+    uv tool install ntrp    # Python backend (PyPI)
+    bun install -g ntrp-cli # TUI client (npm)
+    ```
+  </Tab>
+  <Tab title="From source">
+    ```bash
+    git clone https://github.com/esceptico/ntrp.git
+    cd ntrp
+    uv sync                              # Python backend
+    cd ntrp-ui && bun install && cd ..   # TUI client
+    ```
+  </Tab>
+</Tabs>
+
+## Set up
+
+<Steps>
+
+### Set your LLM provider key (optional)
+
+You can export a provider API key now, or configure it interactively in the TUI after connecting.
+
+```bash
+# Pick one (or skip and configure in the TUI):
+export ANTHROPIC_API_KEY=sk-ant-...
+export OPENAI_API_KEY=sk-...
+export GEMINI_API_KEY=...
+```
+
+### Start the server
+
+<Tabs>
+  <Tab title="From source">
+    ```bash
+    uv run ntrp-server serve
+    ```
+  </Tab>
+  <Tab title="Installed">
+    ```bash
+    ntrp-server serve
+    ```
+  </Tab>
+</Tabs>
+
+On first run, ntrp generates an API key and prints it:
+
+```
+Your API key: nBx7k2...
+Enter this in the TUI to connect. It won't be shown again.
+```
+
+<Warning>Copy this key — it's only shown once. Use `ntrp-server serve --reset-key` to generate a new one.</Warning>
+
+### Start the TUI
+
+In a separate terminal:
+
+<Tabs>
+  <Tab title="Installed">
+    ```bash
+    ntrp
+    ```
+  </Tab>
+  <Tab title="From source">
+    ```bash
+    cd ntrp-ui
+    bun run start
+    ```
+  </Tab>
+</Tabs>
+
+Paste your API key in the connection dialog. If no LLM provider is configured, a provider setup screen appears where you can connect a provider and choose a default model.
+
+</Steps>
+
+## What's next?
+
+<CardGroup cols={2}>
+  <Card title="TUI Guide" icon="terminal" href="/guides/tui">
+    Keyboard shortcuts and slash commands.
+  </Card>
+  <Card title="Configuration" icon="gear" href="/configuration">
+    Customize models, enable integrations, and tune settings.
+  </Card>
+  <Card title="Memory" icon="brain" href="/guides/memory">
+    Understand how ntrp remembers things.
+  </Card>
+  <Card title="Connect Gmail" icon="envelope" href="/integrations/gmail">
+    Let ntrp read and send emails.
+  </Card>
+</CardGroup>

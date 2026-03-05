@@ -21,7 +21,6 @@ from ntrp.events.sse import (
 )
 from ntrp.llm.models import Provider, get_model
 from ntrp.logging import get_logger
-from ntrp.memory.facts import FactMemory
 from ntrp.memory.formatting import format_session_memory
 from ntrp.server.state import RunRegistry, RunState, RunStatus
 from ntrp.server.stream import run_agent_loop
@@ -48,7 +47,6 @@ class ChatContext:
     executor: ToolExecutor
     tools: list[dict]
     config: AgentConfig
-    memory: FactMemory | None
     channel: Channel
     available_sources: list[str]
     source_errors: dict[str, str]
@@ -101,12 +99,15 @@ class ChatService:
         skills_context = runtime.skill_registry.to_prompt_xml() if runtime.skill_registry else None
         directives = load_directives()
 
+        notifier_names = list(runtime.notifier_service.notifiers) if runtime.notifier_service else None
+
         system_blocks = build_system_blocks(
             source_details=runtime.source_mgr.get_details(),
             last_activity=last_activity,
             memory_context=memory_context,
             skills_context=skills_context,
             directives=directives,
+            notifier_names=notifier_names,
             use_cache_control=_is_anthropic(runtime.config.chat_model),
         )
 
@@ -162,7 +163,6 @@ class ChatService:
                 explore_model=runtime.config.explore_model,
                 max_depth=runtime.config.max_depth,
             ),
-            memory=runtime.memory,
             channel=runtime.channel,
             available_sources=runtime.get_available_sources(),
             source_errors=runtime.get_source_errors(),
@@ -197,10 +197,8 @@ class ChatService:
                 tools=ctx.tools,
                 system_prompt=ctx.run.messages[0]["content"] if ctx.run.messages else [],
                 session_state=session_state,
-                memory=ctx.memory,
                 channel=ctx.channel,
                 run_id=run.run_id,
-                cancel_check=lambda: run.cancelled,
                 io=IOBridge(
                     approval_queue=run.approval_queue,
                 ),
@@ -230,6 +228,7 @@ class ChatService:
             _logger.exception("Chat stream failed (run_id=%s, session_id=%s)", run.run_id, session_state.session_id)
             yield ErrorEvent(message=str(e), recoverable=False).to_sse_string()
             run.status = RunStatus.ERROR
+            ctx.run_registry.cleanup_old_runs()
 
         finally:
             if agent:
@@ -241,6 +240,8 @@ class ChatService:
             ctx.channel.publish(
                 RunCompleted(
                     run_id=run.run_id,
+                    session_id=session_state.session_id,
+                    messages=tuple(run.messages),
                     usage=run.usage,
                     result=result,
                 )

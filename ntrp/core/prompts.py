@@ -1,6 +1,10 @@
 from datetime import UTC, datetime
 
+from jinja2 import Environment
+
 from ntrp.constants import AGENT_MAX_DEPTH, CONVERSATION_GAP_THRESHOLD
+
+env = Environment(trim_blocks=True, lstrip_blocks=True)
 
 BASE_SYSTEM_PROMPT = f"""You are ntrp, a personal assistant with deep access to the user's notes, memory, and connected data sources. You know the user personally through stored memory — use that context to give grounded, specific answers.
 
@@ -36,11 +40,11 @@ Skip ephemeral noise: billing alerts, CI failures, token events, connection requ
 
 **Calendar** — create_calendar_event, edit_calendar_event, delete_calendar_event. Require approval.
 
-**Utility** — explore (deep research), bash (shell).
+**Utility** — explore (deep research), bash (shell), current_time (current date/time).
 
 **Directives** — set_directives updates persistent rules injected into your system prompt. When the user tells you how to behave, what to do or avoid, or asks you to change your style/tone — call set_directives. Read current directives first, then write the full updated version.
 
-**Scheduling** — schedule_task (create recurring/one-time agent tasks), list_schedules, cancel_schedule, get_schedule_result (last execution output). Tasks run autonomously at the specified time with full tool access.
+**Automations** — create_automation (time-scheduled or event-triggered agent tasks), list_automations, delete_automation, get_automation_result (last execution output). Automations run autonomously with full tool access.
 
 ## MEMORY
 
@@ -98,29 +102,53 @@ WORKFLOW:
 {_EXPLORE_BASE}""",
 }
 
-# Default for backward compat
-EXPLORE_PROMPT = EXPLORE_PROMPTS["normal"]
 
+STATIC_BLOCK = env.from_string("""{{ base_prompt }}
+{% if directives %}
 
-ENVIRONMENT_TEMPLATE = """## CONTEXT
-Today is {date} at {time} (user's local time)."""
+## DIRECTIVES
+{{ directives }}
+{% endif %}
+{% for key in ['notes', 'browser', 'gmail', 'calendar'] if sources[key] %}
+{% if loop.first %}
 
-DATA_SOURCES_HEADER = """## DATA SOURCES"""
+## DATA SOURCES
+{% endif %}
+{% if key == 'notes' -%}
+**Notes** — Obsidian vault{{ " at " + sources.notes.path if sources.notes.path }}
+{% elif key == 'browser' -%}
+**Browser** — {{ sources.browser.type | capitalize }} history (last {{ sources.browser.days }} days)
+{% elif key == 'gmail' -%}
+**Email**{{ " — " + (sources.gmail.accounts | join(", ")) if sources.gmail.accounts }} (last {{ sources.gmail.days }} days)
+{% elif key == 'calendar' -%}
+**Calendar**{{ " — " + (sources.calendar.accounts | join(", ")) if sources.calendar.accounts }}
+{%- endif %}
+{% endfor %}
+{% if notifier_names %}
 
-NOTES_TEMPLATE = """**Notes** — Obsidian vault{path_info}"""
+## NOTIFIERS
+Available notification channels: {{ notifier_names | join(", ") }}. Use these names in the `notifiers` field when creating automations.
+{% endif %}
+{% if skills_xml %}
 
-BROWSER_TEMPLATE = """**Browser** — {browser_type} history (last {days} days)"""
+## SKILLS
+The following skills are available via `use_skill(skill="name", args="optional context")`.
 
-EMAIL_TEMPLATE = """**Email**{accounts_info} (last {days} days)"""
+Skills provide specialized capabilities and domain knowledge. When the user asks you to perform a task that matches an available skill, invoke it BEFORE generating any other response about the task. Do NOT load a skill just because a keyword matches — only when you genuinely need the skill's instructions to complete the task.
 
-CALENDAR_TEMPLATE = """**Calendar**{accounts_info}"""
+If a skill has already been loaded in this conversation (you see a `<skill>` tag in a prior message), follow its instructions directly instead of calling use_skill again.
 
-DIRECTIVES_TEMPLATE = """## DIRECTIVES
-{directives}"""
+{{ skills_xml }}
+{% endif %}""")
 
-MEMORY_CONTEXT_TEMPLATE = """## MEMORY CONTEXT
-{memory_content}"""
+DYNAMIC_BLOCK = env.from_string("""## CONTEXT
+Today is {{ date }} at {{ time }} (user's local time).
+{% if time_gap %}
 
+{{ time_gap }}
+{% endif %}""")
+
+TEMPORAL_REMINDER = env.from_string("Remember: today is {{ date }}.")
 
 INIT_INSTRUCTION = """Build a thorough profile of the user by deeply exploring their data. Explore first, present findings, confirm later.
 
@@ -188,49 +216,8 @@ Ask about their work, projects, and interests, then explore based on answers.
 - Minimal user effort — they just confirm or correct"""
 
 
-def _environment() -> str:
-    now = datetime.now()
-    return ENVIRONMENT_TEMPLATE.format(
-        date=now.strftime("%A, %B %d, %Y"),
-        time=now.strftime("%H:00"),
-    )
-
-
-def _sources(details: dict[str, dict]) -> str:
-    if not details:
-        return ""
-
-    lines = []
-
-    if info := details.get("notes"):
-        path_info = f" at {info['path']}" if info["path"] else ""
-        lines.append(NOTES_TEMPLATE.format(path_info=path_info))
-
-    if info := details.get("browser"):
-        lines.append(
-            BROWSER_TEMPLATE.format(
-                browser_type=info["type"].capitalize(),
-                days=info["days"],
-            )
-        )
-
-    if info := details.get("gmail"):
-        accounts_info = f" — {', '.join(info['accounts'])}" if info["accounts"] else ""
-        lines.append(
-            EMAIL_TEMPLATE.format(
-                accounts_info=accounts_info,
-                days=info["days"],
-            )
-        )
-
-    if info := details.get("calendar"):
-        accounts_info = f" — {', '.join(info['accounts'])}" if info["accounts"] else ""
-        lines.append(CALENDAR_TEMPLATE.format(accounts_info=accounts_info))
-
-    if not lines:
-        return ""
-
-    return DATA_SOURCES_HEADER + "\n" + "\n".join(lines)
+def current_date_formatted() -> str:
+    return datetime.now().strftime("%A, %B %d, %Y")
 
 
 def _time_gap(last_activity: datetime | None) -> str:
@@ -245,54 +232,13 @@ def _time_gap(last_activity: datetime | None) -> str:
     return f"Note: Last interaction was {hours:.1f} hours ago."
 
 
-_SCHEDULED_TASK_SUFFIX = (
-    "\n\nYou are executing a scheduled task autonomously. "
-    "Do the work described directly — gather information, produce output, and return the result. "
-    "Do not schedule new tasks or ask for confirmation. "
-    "Return only the final output — no preamble, no narration, no thinking out loud. "
-    "If the user asked to be notified, told, or written to — use the notify tool."
-)
-
-
-def scheduled_task_suffix() -> str:
-    return _SCHEDULED_TASK_SUFFIX
-
-
-SKILLS_TEMPLATE = """## SKILLS
-The following skills are available via `use_skill(skill="name", args="optional context")`.
-
-Skills provide specialized capabilities and domain knowledge. When the user asks you to perform a task that matches an available skill, invoke it BEFORE generating any other response about the task. Do NOT load a skill just because a keyword matches — only when you genuinely need the skill's instructions to complete the task.
-
-If a skill has already been loaded in this conversation (you see a `<skill>` tag in a prior message), follow its instructions directly instead of calling use_skill again.
-
-{skills_xml}"""
-
-
-def _static_text(
-    source_details: dict[str, dict],
-    skills_context: str | None = None,
-    directives: str | None = None,
-) -> str:
-    parts = [BASE_SYSTEM_PROMPT]
-    if directives:
-        parts.append(DIRECTIVES_TEMPLATE.format(directives=directives))
-    parts.append(_sources(source_details))
-    if skills_context:
-        parts.append(SKILLS_TEMPLATE.format(skills_xml=skills_context))
-    return "\n\n".join(s for s in parts if s)
-
-
-def _dynamic_text(last_activity: datetime | None = None) -> str:
-    parts = [_environment(), _time_gap(last_activity)]
-    return "\n\n".join(s for s in parts if s)
-
-
 def build_system_blocks(
     source_details: dict[str, dict],
     last_activity: datetime | None = None,
     memory_context: str | None = None,
     skills_context: str | None = None,
     directives: str | None = None,
+    notifier_names: list[str] | None = None,
     use_cache_control: bool = False,
 ) -> list[dict]:
     """Build system prompt as a list of content blocks.
@@ -301,26 +247,38 @@ def build_system_blocks(
     to stable blocks for prompt caching. Other providers ignore this or
     break on it (Gemini), so it must be opt-in.
     """
-    static = _static_text(source_details, skills_context, directives)
+    now = datetime.now()
+    date = now.strftime("%A, %B %d, %Y")
 
+    static = STATIC_BLOCK.render(
+        base_prompt=BASE_SYSTEM_PROMPT,
+        directives=directives,
+        sources=source_details,
+        skills_xml=skills_context,
+        notifier_names=notifier_names,
+    )
     static_block: dict = {"type": "text", "text": static}
     if use_cache_control:
         static_block["cache_control"] = {"type": "ephemeral"}
-
     blocks = [static_block]
 
-    dynamic = _dynamic_text(last_activity)
-    if dynamic:
-        blocks.append({"type": "text", "text": dynamic})
+    dynamic = DYNAMIC_BLOCK.render(
+        date=date,
+        time=now.strftime("%H:00"),
+        time_gap=_time_gap(last_activity),
+    )
+    blocks.append({"type": "text", "text": dynamic})
 
     if memory_context:
         memory_block: dict = {
             "type": "text",
-            "text": MEMORY_CONTEXT_TEMPLATE.format(memory_content=memory_context),
+            "text": f"## MEMORY CONTEXT\n{memory_context}",
         }
         if use_cache_control:
             memory_block["cache_control"] = {"type": "ephemeral"}
         blocks.append(memory_block)
+
+    blocks.append({"type": "text", "text": TEMPORAL_REMINDER.render(date=date)})
 
     return blocks
 
@@ -331,9 +289,15 @@ def build_system_prompt(
     memory_context: str | None = None,
     skills_context: str | None = None,
     directives: str | None = None,
+    notifier_names: list[str] | None = None,
 ) -> str:
     """Build system prompt as a single string (for non-chat callers like scheduler/CLI)."""
-    parts = [_static_text(source_details, skills_context, directives), _dynamic_text(last_activity)]
-    if memory_context:
-        parts.append(MEMORY_CONTEXT_TEMPLATE.format(memory_content=memory_context))
-    return "\n\n".join(s for s in parts if s)
+    blocks = build_system_blocks(
+        source_details,
+        last_activity=last_activity,
+        memory_context=memory_context,
+        skills_context=skills_context,
+        directives=directives,
+        notifier_names=notifier_names,
+    )
+    return "\n\n".join(b["text"] for b in blocks)

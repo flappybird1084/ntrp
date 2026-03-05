@@ -1,28 +1,30 @@
 from typing import TYPE_CHECKING
 
+from ntrp.logging import get_logger
 from ntrp.tools.core.base import ToolResult
 from ntrp.tools.core.context import ToolExecution
 from ntrp.tools.core.registry import ToolRegistry
-from ntrp.tools.specs import TOOL_FACTORIES, ToolDeps
+from ntrp.tools.discover import discover_user_tools
+from ntrp.tools.specs import ALL_TOOLS
 
 if TYPE_CHECKING:
     from ntrp.server.runtime import Runtime
+
+_logger = get_logger(__name__)
 
 
 class ToolExecutor:
     def __init__(self, runtime: "Runtime"):
         self.runtime = runtime
         self.registry = ToolRegistry()
-
-        deps = ToolDeps(
-            search_index=runtime.indexer.index,
-            schedule_store=runtime.schedule_store,
-            skill_registry=runtime.skill_registry,
-            notifier_service=runtime.notifier_service,
-        )
-        for create_tools in TOOL_FACTORIES:
-            for tool in create_tools(deps):
-                self.registry.register(tool)
+        for cls in ALL_TOOLS:
+            self.registry.register(cls())
+        for cls in discover_user_tools():
+            if cls.name in self.registry:
+                _logger.warning("User tool %r skipped — conflicts with built-in", cls.name)
+            else:
+                self.registry.register(cls())
+                _logger.info("Loaded user tool: %s", cls.name)
 
     def with_registry(self, registry: ToolRegistry) -> "ToolExecutor":
         clone = ToolExecutor.__new__(ToolExecutor)
@@ -42,8 +44,7 @@ class ToolExecutor:
 
     def get_tools(self, mutates: bool | None = None) -> list[dict]:
         return self.registry.get_schemas(
-            sources=self.runtime.source_mgr.sources,
-            has_memory=self.runtime.memory is not None,
+            capabilities=frozenset(self.runtime.tool_services),
             mutates=mutates,
         )
 

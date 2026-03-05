@@ -1,4 +1,3 @@
-from collections.abc import Callable
 from dataclasses import dataclass
 
 from ntrp.channel import Channel
@@ -6,7 +5,6 @@ from ntrp.context.models import SessionState
 from ntrp.core.agent import Agent
 from ntrp.core.ledger import ExplorationLedger
 from ntrp.core.spawner import create_spawn_fn
-from ntrp.memory.facts import FactMemory
 from ntrp.tools.core.context import IOBridge, RunContext, ToolContext
 from ntrp.tools.executor import ToolExecutor
 
@@ -25,10 +23,8 @@ def create_agent(
     tools: list[dict],
     system_prompt: str | list[dict],
     session_state: SessionState,
-    memory: FactMemory | None,
     channel: Channel,
     run_id: str,
-    cancel_check: Callable[[], bool] | None = None,
     io: IOBridge | None = None,
     extra_auto_approve: set[str] | None = None,
 ) -> Agent:
@@ -44,8 +40,7 @@ def create_agent(
         registry=executor.registry,
         run=run_ctx,
         io=io or IOBridge(),
-        memory=memory,
-        sources=executor.runtime.source_mgr.sources,
+        services=executor.runtime.tool_services,
         channel=channel,
         ledger=ExplorationLedger(),
     )
@@ -54,7 +49,6 @@ def create_agent(
         model=config.model,
         max_depth=config.max_depth,
         current_depth=0,
-        cancel_check=cancel_check,
     )
 
     return Agent(
@@ -65,5 +59,4 @@ def create_agent(
         ctx=tool_ctx,
         max_depth=config.max_depth,
         current_depth=0,
-        cancel_check=cancel_check,
     )

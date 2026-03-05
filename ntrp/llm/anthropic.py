@@ -4,7 +4,7 @@ import anthropic
 from pydantic import BaseModel
 
 from ntrp.llm.base import CompletionClient
-from ntrp.llm.models import get_model
+from ntrp.llm.models import get_model, strip_oauth_prefix
 from ntrp.llm.types import (
     Choice,
     CompletionResponse,
@@ -24,8 +24,14 @@ _FINISH_REASONS = {
 
 
 class AnthropicClient(CompletionClient):
-    def __init__(self, api_key: str | None = None):
-        self._client = anthropic.AsyncAnthropic(api_key=api_key)
+    def __init__(self, api_key: str | None = None, auth_token: str | None = None):
+        kwargs: dict = {}
+        if auth_token:
+            kwargs["auth_token"] = auth_token
+            kwargs["default_headers"] = {"anthropic-beta": "oauth-2025-04-20"}
+        else:
+            kwargs["api_key"] = api_key
+        self._client = anthropic.AsyncAnthropic(**kwargs)
 
     async def _completion(
         self,
@@ -38,6 +44,7 @@ class AnthropicClient(CompletionClient):
         response_format: type[BaseModel] | None = None,
         **kwargs,
     ) -> CompletionResponse:
+        model = strip_oauth_prefix(model)
         if max_tokens is None:
             max_tokens = get_model(model).max_output_tokens
 

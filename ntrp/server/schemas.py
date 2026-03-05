@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 
 
 class ChatRequest(BaseModel):
-    message: str
+    message: str = Field(..., min_length=1, max_length=100_000)
     skip_approvals: bool = False
     session_id: str | None = None
 
@@ -82,12 +82,40 @@ class UpdateObservationRequest(BaseModel):
     summary: str = Field(..., min_length=1, max_length=10000)
 
 
-# --- Schedule / notifiers ---
+# --- Automations / notifiers ---
 
 
-class UpdateScheduleRequest(BaseModel):
+class CreateAutomationRequest(BaseModel):
+    name: str = Field(min_length=1)
+    description: str = Field(min_length=1)
+    model: str | None = None
+    trigger_type: str
+    at: str | None = None
+    days: str | None = None
+    every: str | None = None
+    event_type: str | None = None
+    lead_minutes: int | str | None = None
+    notifiers: list[str] = Field(default_factory=list)
+    writable: bool = False
+    start: str | None = None
+    end: str | None = None
+
+
+class UpdateAutomationRequest(BaseModel):
     name: str | None = None
     description: str | None = None
+    model: str | None = None
+    trigger_type: str | None = None
+    at: str | None = None
+    days: str | None = None
+    every: str | None = None
+    event_type: str | None = None
+    lead_minutes: int | str | None = None
+    start: str | None = None
+    end: str | None = None
+    notifiers: list[str] | None = None
+    writable: bool | None = None
+    enabled: bool | None = None
 
 
 class SetNotifiersRequest(BaseModel):
@@ -103,6 +131,26 @@ class CreateNotifierRequest(BaseModel):
 class UpdateNotifierRequest(BaseModel):
     config: dict
     name: str | None = None
+
+
+# --- Skills ---
+
+
+class ConnectProviderRequest(BaseModel):
+    api_key: str = Field(..., min_length=1)
+    chat_model: str | None = None
+
+
+class ConnectServiceRequest(BaseModel):
+    api_key: str = Field(..., min_length=1)
+
+
+class AddCustomModelRequest(BaseModel):
+    model_id: str = Field(..., min_length=1)
+    base_url: str = Field(..., min_length=1)
+    context_window: int = Field(..., gt=0)
+    max_output_tokens: int = 8192
+    api_key: str | None = None
 
 
 # --- Skills ---

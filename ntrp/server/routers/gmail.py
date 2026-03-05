@@ -1,8 +1,8 @@
 import asyncio
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
-from ntrp.server.runtime import get_runtime
+from ntrp.server.runtime import Runtime, get_runtime
 from ntrp.sources.google.auth import (
     CREDENTIALS_PATH,
     NTRP_DIR,
@@ -32,9 +32,11 @@ async def gmail_accounts():
                 }
             )
         except Exception as e:
+            name = token_path.stem
+            email = name.removeprefix("gmail_token_") if name.startswith("gmail_token_") else None
             accounts.append(
                 {
-                    "email": None,
+                    "email": email,
                     "token_file": token_path.name,
                     "error": str(e),
                 }
@@ -44,7 +46,7 @@ async def gmail_accounts():
 
 
 @router.post("/add")
-async def gmail_add():
+async def gmail_add(runtime: Runtime = Depends(get_runtime)):
     if not CREDENTIALS_PATH.exists():
         raise HTTPException(
             status_code=400,
@@ -54,9 +56,9 @@ async def gmail_add():
 
     try:
         email = await asyncio.to_thread(add_gmail_account)
-
-        runtime = get_runtime()
         await runtime.source_mgr.reinit("gmail", runtime.config)
+        await runtime.source_mgr.reinit("calendar", runtime.config)
+        await runtime.restart_monitor()
 
         return {"email": email, "status": "connected"}
     except Exception as e:
@@ -64,17 +66,18 @@ async def gmail_add():
 
 
 @router.delete("/{token_file}")
-async def gmail_remove(token_file: str):
-    # Security: only allow removing gmail_token*.json files
+async def gmail_remove(token_file: str, runtime: Runtime = Depends(get_runtime)):
+    # Security: validate filename and ensure path stays within NTRP_DIR
     if not token_file.startswith("gmail_token") or not token_file.endswith(".json"):
         raise HTTPException(status_code=400, detail="Invalid token file name")
 
-    token_path = NTRP_DIR / token_file
+    token_path = (NTRP_DIR / token_file).resolve()
+    if not token_path.is_relative_to(NTRP_DIR.resolve()):
+        raise HTTPException(status_code=400, detail="Invalid token file path")
     if not token_path.exists():
         raise HTTPException(status_code=404, detail="Token file not found")
 
     try:
-        # Get email before deleting (for response)
         email = None
         try:
             src = GmailSource(token_path=token_path)
@@ -83,9 +86,9 @@ async def gmail_remove(token_file: str):
             pass
 
         token_path.unlink()
-
-        runtime = get_runtime()
         await runtime.source_mgr.reinit("gmail", runtime.config)
+        await runtime.source_mgr.reinit("calendar", runtime.config)
+        await runtime.restart_monitor()
 
         return {"email": email, "status": "removed"}
     except Exception as e:

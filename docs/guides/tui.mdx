@@ -1,0 +1,105 @@
+---
+title: "TUI Guide"
+description: "Terminal UI keyboard shortcuts and commands."
+---
+
+## Connection screen
+
+On first launch (or after `/logout`), the TUI shows a **CONNECT** dialog asking for the server URL and API key. The API key is masked as you type.
+
+| Shortcut | Action |
+|----------|--------|
+| `Tab` / `↑↓` | Switch between fields |
+| `Enter` | Connect |
+| `Ctrl+C` | Exit |
+
+After connecting, if no LLM provider is configured, a **provider onboarding** dialog appears where you can connect a provider and choose a default model. For Anthropic, you can choose between an API key or OAuth sign-in with a Claude Pro/Max subscription.
+
+## Keyboard shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `Enter` | Send message |
+| `Escape` | Cancel running agent |
+| `Ctrl+C` | Exit |
+| `Ctrl+L` | Toggle sidebar |
+| `Ctrl+N` | New session |
+| `Shift+Tab` | Cycle to next session |
+| `Tab` `Tab` | Toggle auto-approve mode |
+
+## Slash commands
+
+| Command | Description |
+|---------|-------------|
+| `/new [name]` | Start a new session |
+| `/sessions` | Switch, create, or delete sessions |
+| `/name <name>` | Rename current session |
+| `/delete [query]` | Delete a session |
+| `/restore <query>` | Restore an archived session |
+| `/init` | Scan sources and learn about you |
+| `/index` | Re-index notes for semantic search |
+| `/memory` | View memory (facts, observations) |
+| `/automations` | View and manage automations |
+| `/theme` | Choose a theme |
+| `/settings` | Model, connections, and UI settings |
+| `/compact` | Summarize old messages to save tokens |
+| `/clear` | Clear current session messages |
+| `/purge confirm` | Clear graph memory (keeps note embeddings) |
+| `/connect` | Manage LLM providers |
+| `/models` | Switch models |
+| `/logout` | Clear credentials and disconnect |
+| `/exit` | Exit application |
+
+Skills also appear as slash commands once installed.
+
+## Views
+
+### Chat
+
+The default view. Type messages, see agent responses with tool call visualizations and approval dialogs.
+
+### Settings (`/settings`)
+
+Configure models, integrations, server connection, and UI preferences. Uses drill navigation — `↑↓` to navigate sections, `Enter` to drill in, `Escape` to back out.
+
+### Memory viewer (`/memory`)
+
+Browse facts, observations, and dreams. Edit or delete entries.
+
+### Automations viewer (`/automations`)
+
+List automations with their schedules, toggle enable/disable, trigger manual runs.
+
+The create/edit form uses drill navigation:
+
+| Shortcut | Action |
+|----------|--------|
+| `↑↓` | Navigate between fields |
+| `Enter` | Drill into a field to edit |
+| `←→` | Adjust selector fields (trigger type, mode, days) |
+| `Space` | Toggle checkboxes (notifiers, days, writable) |
+| `Escape` | Stop editing / exit form |
+| `Ctrl+S` | Save |
+
+### Session picker (`/sessions`)
+
+Switch between sessions, create new ones, archive or permanently delete old sessions.
+
+## Sidebar
+
+The sidebar (toggle with `Ctrl+L`) shows:
+
+- Server URL and version
+- Current models (with `oauth` tag when using Claude OAuth)
+- Context usage (token bar)
+- Session cost tracking
+- Memory stats
+- Connected sources
+- Upcoming automations
+- Recent sessions
+
+Requires terminal width of at least 94 columns.
+
+## Auto-approve mode
+
+Double-tap `Tab` to toggle. Tool approvals are skipped for the current session.

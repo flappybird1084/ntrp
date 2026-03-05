@@ -123,8 +123,7 @@ export type ApprovalResult = "once" | "always" | "reject";
 
 export interface Config {
   serverUrl: string;
+  apiKey: string;
+  needsSetup: boolean;
+  needsProvider?: boolean;
 }
-
-export const defaultConfig: Config = {
-  serverUrl: process.env.NTRP_SERVER_URL || "http://localhost:8000",
-};

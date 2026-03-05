@@ -32,10 +32,11 @@ class OperatorDeps:
 @dataclass(frozen=True)
 class RunRequest:
     prompt: str
-    prompt_suffix: str
     writable: bool
     notifiers: list[str]
     source_id: str
+    prompt_suffix: str = ""
+    model: str | None = None
 
 
 @dataclass(frozen=True)
@@ -57,6 +58,7 @@ async def run_agent(deps: OperatorDeps, request: RunRequest) -> RunResult:
         source_details=deps.source_details,
         memory_context=memory_context,
         directives=load_directives(),
+        notifier_names=list(deps.notifiers) if deps.notifiers else None,
     )
     system_prompt += request.prompt_suffix
 
@@ -72,13 +74,20 @@ async def run_agent(deps: OperatorDeps, request: RunRequest) -> RunResult:
             executor = executor.with_registry(run_registry)
             tools = [*tools, notify_tool.to_dict()]
 
+    agent_config = deps.config
+    if request.model:
+        agent_config = AgentConfig(
+            model=request.model,
+            explore_model=deps.config.explore_model,
+            max_depth=deps.config.max_depth,
+        )
+
     agent = create_agent(
         executor=executor,
-        config=deps.config,
+        config=agent_config,
         tools=tools,
         system_prompt=system_prompt,
         session_state=session_state,
-        memory=deps.memory,
         channel=deps.channel,
         run_id=run_id,
     )
@@ -88,6 +97,14 @@ async def run_agent(deps: OperatorDeps, request: RunRequest) -> RunResult:
     try:
         output = await agent.run(request.prompt)
     finally:
-        deps.channel.publish(RunCompleted(run_id=run_id, usage=agent.usage, result=output))
+        deps.channel.publish(
+            RunCompleted(
+                run_id=run_id,
+                session_id=session_state.session_id,
+                messages=tuple(agent.messages),
+                usage=agent.usage,
+                result=output,
+            )
+        )
 
     return RunResult(run_id=run_id, output=output, usage=agent.usage)

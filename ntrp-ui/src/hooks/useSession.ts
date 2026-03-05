@@ -25,52 +25,73 @@ export function useSession(config: Config) {
   const [sources, setSources] = useState<string[]>([]);
   const [skipApprovals, setSkipApprovals] = useState(false);
   const [serverConnected, setServerConnected] = useState(false);
+  const [serverVersion, setServerVersion] = useState<string | null>(null);
   const [serverConfig, setServerConfig] = useState<ServerConfig | null>(null);
   const [indexStatus, setIndexStatus] = useState<IndexStatus | null>(null);
   const [history, setHistory] = useState<HistoryMessage[]>([]);
   const initRef = useRef(false);
 
+  const initializeSession = useCallback(async () => {
+    try {
+      const health = await checkHealth(config);
+      if (!health.ok) return false;
+
+      const [session, configData, idxStatus, historyData] = await Promise.all([
+        getSession(config),
+        getServerConfig(config),
+        getIndexStatus(config).catch(() => null),
+        getHistory(config).catch(() => ({ messages: [] })),
+      ]);
+
+      setSessionId(session.session_id);
+      setSessionName(session.name ?? null);
+      setSources(session.sources);
+      setServerConfig(configData);
+      setHistory(historyData.messages);
+      setServerConnected(true);
+      setServerVersion(health.version);
+
+      if (idxStatus?.indexing || idxStatus?.reembedding) {
+        setIndexStatus(idxStatus);
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }, [config]);
+
+  // Initial connection with retry
   useEffect(() => {
     if (initRef.current) return;
     initRef.current = true;
 
-    async function waitForServer(maxAttempts = 30, intervalMs = 1000): Promise<boolean> {
-      for (let i = 0; i < maxAttempts; i++) {
-        if (await checkHealth(config)) return true;
-        await new Promise((r) => setTimeout(r, intervalMs));
-      }
-      return false;
-    }
-
+    let cancelled = false;
     async function init() {
-      try {
-        const healthy = await waitForServer();
-        setServerConnected(healthy);
-
-        if (healthy) {
-          const [session, configData, idxStatus, historyData] = await Promise.all([
-            getSession(config),
-            getServerConfig(config),
-            getIndexStatus(config).catch(() => null),
-            getHistory(config).catch(() => ({ messages: [] })),
-          ]);
-
-          setSessionId(session.session_id);
-          setSessionName(session.name ?? null);
-          setSources(session.sources);
-          setServerConfig(configData);
-          setHistory(historyData.messages);
-
-          if (idxStatus?.indexing || idxStatus?.reembedding) {
-            setIndexStatus(idxStatus);
-          }
-        }
-      } catch {
-        setServerConnected(false);
+      for (let i = 0; i < 30 && !cancelled; i++) {
+        if (await initializeSession()) return;
+        await new Promise((r) => setTimeout(r, 1000));
       }
     }
     init();
-  }, [config]);
+    return () => { cancelled = true; };
+  }, [initializeSession]);
+
+  // Heartbeat: detect server going down, reconnect when it comes back
+  useEffect(() => {
+    if (!initRef.current) return;
+
+    const intervalMs = serverConnected ? 10000 : 3000;
+    const poll = setInterval(async () => {
+      const health = await checkHealth(config);
+      if (health.ok && !serverConnected) {
+        await initializeSession();
+      } else if (!health.ok && serverConnected) {
+        setServerConnected(false);
+      }
+    }, intervalMs);
+
+    return () => clearInterval(poll);
+  }, [serverConnected, config, initializeSession]);
 
   useEffect(() => {
     if (!serverConnected) return;
@@ -125,7 +146,15 @@ export function useSession(config: Config) {
     setServerConfig((prev) => prev && { ...prev, ...patch });
   };
 
+  const sessionIdRef = useRef(sessionId);
+  sessionIdRef.current = sessionId;
+  const sessionNameRef = useRef(sessionName);
+  sessionNameRef.current = sessionName;
+
   const switchSession = useCallback(async (targetSessionId: string): Promise<{ history: HistoryMessage[] } | null> => {
+    const prevId = sessionIdRef.current;
+    const prevName = sessionNameRef.current;
+    setSessionId(targetSessionId);
     try {
       const [session, historyData] = await Promise.all([
         getSession(config, targetSessionId),
@@ -137,6 +166,8 @@ export function useSession(config: Config) {
       setHistory(historyData.messages);
       return { history: historyData.messages };
     } catch {
+      setSessionId(prevId);
+      setSessionName(prevName);
       return null;
     }
   }, [config]);
@@ -160,6 +191,7 @@ export function useSession(config: Config) {
     sources,
     skipApprovals,
     serverConnected,
+    serverVersion,
     serverConfig,
     indexStatus,
     history,

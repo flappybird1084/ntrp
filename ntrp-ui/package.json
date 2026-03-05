@@ -1,13 +1,36 @@
 {
-  "name": "ntrp-opentui-prototype",
+  "name": "ntrp-cli",
+  "version": "0.6.0",
+  "description": "ntrp – personal entropy reduction system",
   "type": "module",
+  "bin": {
+    "ntrp": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "start": "bun run src/index.tsx",
-    "dev": "bun --watch run src/index.tsx"
+    "dev": "bun --watch run src/index.tsx",
+    "build": "bun build ./src/index.tsx --minify --target=bun --outdir ./dist && chmod +x ./dist/index.js",
+    "prepublishOnly": "bun run build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/esceptico/ntrp.git",
+    "directory": "ntrp-ui"
+  },
+  "publishConfig": {
+    "provenance": true
+  },
+  "license": "MIT",
+  "packageManager": "bun@1.3.10",
+  "engines": {
+    "bun": ">=1.3.10"
   },
   "dependencies": {
-    "@opentui/core": "^0.1.80",
-    "@opentui/react": "^0.1.80"
+    "@opentui/core": "0.1.84",
+    "@opentui/react": "0.1.84"
   },
   "devDependencies": {
     "@types/bun": "latest",

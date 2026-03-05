@@ -1,6 +1,6 @@
 [project]
 name = "ntrp"
-version = "0.1.0"
+version = "0.6.0"
 description = "Personal AI assistant with persistent memory and multi-source knowledge integration"
 readme = "README.md"
 license = {text = "MIT"}
@@ -26,6 +26,9 @@ dependencies = [
     "markdown>=3.7",
     "pyyaml>=6.0",
     "aiohttp>=3.13.3",
+    "jinja2>=3.1.0",
+    "google-cloud-pubsub>=2.35.0",
+    "telegramify-markdown>=0.5.4",
 ]
 
 [project.urls]
@@ -43,7 +46,7 @@ dev = [
 ]
 
 [project.scripts]
-ntrp = "ntrp.cli:main"
+ntrp-server = "ntrp.cli:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -78,6 +81,7 @@ ignore = [
     "SIM103", # return condition directly - ternary can hurt readability
     "SIM105", # contextlib.suppress - try/except/pass is often clearer
     "SIM108", # ternary operator - explicit if/else is often clearer
+    "RUF001", # en-dash lmao
     "RUF003", # Comment contains ambiguous poo poo -_-
     "RUF005", # list concat - [a] + [b] is fine
     "RUF006", # asyncio task reference - not always needed

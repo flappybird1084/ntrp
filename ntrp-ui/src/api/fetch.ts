@@ -14,6 +14,16 @@ interface FetchOptions {
 
 const DEFAULT_TIMEOUT = 30000; // 30 seconds
 
+let _apiKey = "";
+
+export function setApiKey(key: string) {
+  _apiKey = key;
+}
+
+export function getApiKey(): string {
+  return _apiKey;
+}
+
 function createApiError(
   message: string,
   options: { status?: number; statusText?: string; isNetworkError?: boolean; isTimeout?: boolean } = {}
@@ -38,9 +48,13 @@ async function apiFetch<T>(url: string, options: FetchOptions = {}): Promise<T> 
     : controller.signal;
 
   try {
+    const headers: Record<string, string> = {};
+    if (body) headers["Content-Type"] = "application/json";
+    if (_apiKey) headers["Authorization"] = `Bearer ${_apiKey}`;
+
     const response = await fetch(url, {
       method,
-      headers: body ? { "Content-Type": "application/json" } : undefined,
+      headers: Object.keys(headers).length > 0 ? headers : undefined,
       body: body ? JSON.stringify(body) : undefined,
       signal: combinedSignal,
     });

@@ -1,5 +1,4 @@
 import asyncio
-from collections.abc import Callable
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -28,7 +27,6 @@ def create_spawn_fn(
     model: str,
     max_depth: int,
     current_depth: int,
-    cancel_check: Callable[[], bool] | None,
 ):
     async def spawn_child(
         calling_ctx: ToolContext,
@@ -58,8 +56,7 @@ def create_spawn_fn(
             registry=executor.registry,
             run=child_run,
             io=calling_ctx.io,
-            memory=executor.runtime.memory,
-            sources=executor.runtime.source_mgr.sources,
+            services=calling_ctx.services,
             channel=calling_ctx.channel,
             ledger=calling_ctx.ledger,
         )
@@ -68,7 +65,6 @@ def create_spawn_fn(
             model=model_override or model,
             max_depth=max_depth,
             current_depth=current_depth + 1,
-            cancel_check=cancel_check,
         )
 
         sub_agent = Agent(
@@ -80,7 +76,6 @@ def create_spawn_fn(
             max_depth=max_depth,
             current_depth=current_depth + 1,
             parent_id=parent_id,
-            cancel_check=cancel_check,
         )
 
         try:

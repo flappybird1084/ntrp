@@ -1,4 +1,5 @@
 import asyncio
+import time
 from contextlib import suppress
 from typing import TYPE_CHECKING
 
@@ -6,6 +7,9 @@ from ntrp.events.sse import AgentResult, CancelledEvent, SSEEvent
 
 if TYPE_CHECKING:
     from ntrp.services.chat import ChatContext
+
+SSE_KEEPALIVE = ":\n\n"
+KEEPALIVE_INTERVAL = 5
 
 
 async def run_agent_loop(ctx: "ChatContext", agent):
@@ -29,15 +33,21 @@ async def run_agent_loop(ctx: "ChatContext", agent):
                     result = item
                 elif isinstance(item, SSEEvent):
                     await queue.put(item)
+        except asyncio.CancelledError:
+            result = "Cancelled."
         finally:
             await queue.put(None)
         return result
 
     task = asyncio.create_task(_run())
+    last_event_at = time.monotonic()
 
     try:
         while True:
             if ctx.run.cancelled:
+                task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await task
                 yield CancelledEvent(run_id=ctx.run.run_id).to_sse_string()
                 return
 
@@ -46,7 +56,12 @@ async def run_agent_loop(ctx: "ChatContext", agent):
             except TimeoutError:
                 if task.done():
                     break
+                if time.monotonic() - last_event_at >= KEEPALIVE_INTERVAL:
+                    last_event_at = time.monotonic()
+                    yield SSE_KEEPALIVE
                 continue
+
+            last_event_at = time.monotonic()
 
             if event is None:
                 break

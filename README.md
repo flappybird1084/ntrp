@@ -4,8 +4,8 @@
 
 I built this for myself. ADHD and scattered attention meant I kept losing track of things (e.g. what I said, what I planned, what I was supposed to follow up on). So I made an assistant that hooks into my stuff and actually remembers.
 
-![](docs/images/screen1.png)
-![](docs/images/screen2.png)
+![](docs/internal/images/screen1.png)
+![](docs/internal/images/screen2.png)
 
 ## What it does
 
@@ -18,43 +18,44 @@ I built this for myself. ADHD and scattered attention meant I kept losing track 
 <details>
 <summary>Memory</summary>
 
-![](docs/images/memory.png)
+![](docs/internal/images/memory.png)
 </details>
 
 <details>
 <summary>Schedules</summary>
 
-![](docs/images/schedules.png)
+![](docs/internal/images/schedules.png)
 </details>
 
 <details>
 <summary>Connections</summary>
 
-![](docs/images/sources.png)
+![](docs/internal/images/sources.png)
 </details>
 
-## Quick start
+## Install
 
 ```bash
-git clone https://github.com/esceptico/ntrp.git
-cd ntrp
-uv sync
-cd ntrp-ui && bun install && cd ..
-
-cp .env.example .env
-# Edit .env – set at least one LLM key and the model variables
-
-uv run ntrp serve              # backend
-cd ntrp-ui && bun run src/index.tsx  # UI (separate terminal)
+uv tool install ntrp    # backend (or: pip install ntrp)
+bun install -g ntrp-cli # terminal UI (or: npx ntrp-cli)
 ```
 
-See [docs/setup.md](docs/setup.md) for Google OAuth, Telegram, Obsidian, custom models, Docker, and other integrations.
+```bash
+ntrp-server serve   # starts backend, prints a one-time API key
+ntrp                # terminal UI (separate terminal) – paste the key on first launch
+```
 
-## Requirements
+Full setup guide, integrations, and API reference at **[docs.ntrp.io](https://docs.ntrp.io)**.
 
-- Python 3.13+, [uv](https://docs.astral.sh/uv/)
-- [Bun](https://bun.sh/) (terminal UI)
-- At least one LLM provider API key
+## Releasing
+
+```bash
+./release patch   # 0.5.2 → 0.5.3
+./release minor   # 0.5.2 → 0.6.0
+./release major   # 0.5.2 → 1.0.0
+```
+
+Bumps version, creates a PR, merges, tags, and publishes a GitHub release. PyPI and npm packages are published automatically via CI.
 
 ## Inspired by
 
